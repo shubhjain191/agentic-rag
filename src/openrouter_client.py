@@ -69,14 +69,15 @@ class OpenRouterClient:
             logger.error(f"Error generating response: {e}")
             raise
     
-    def create_rag_prompt(self, query: str, context: List[Dict[str, Any]]) -> List[Dict[str, str]]:
+    def create_rag_prompt(self, query: str, context: List[Dict[str, Any]], is_personal_context: bool = None) -> List[Dict[str, str]]:
         """Create a prompt for RAG system"""
         logger.info(f"Creating RAG prompt for query: {query}")
         logger.info(f"No. of context documents: {len(context)}")
-    
-        # Detect context automatically
-        is_personal_context = self._detect_personal_context(query)
-        logger.info(f"Detected context: {'PERSONAL' if is_personal_context else 'BUSINESS'}")
+
+        if is_personal_context is None:
+            is_personal_context = self._detect_personal_context(query)
+
+        logger.info(f"Using context: {'PERSONAL' if is_personal_context else 'BUSINESS'}")
         
         context_text = ""
         for i, doc in enumerate(context, 1):

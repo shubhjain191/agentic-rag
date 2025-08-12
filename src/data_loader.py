@@ -84,11 +84,16 @@ class EcommerceDataLoader:
         amount = float(row['Amount'])
         profit = float(row['Profit'])
         quantity = int(row['Quantity'])
-        
-        profit_description = self._get_profit_description(profit)
+        if profit > 0:
+            profit_status = f"PROFIT of ${profit:.2f}"
+        elif profit < 0:
+            profit_status = f"LOSS of ${abs(profit):.2f}"
+        else:
+            profit_status = "BREAK-EVEN (no profit/loss)"
+
         amount_range = self._get_amount_range(amount)
-        
-        return f"Product: {product_name} from {category} category. Price: ${amount:.2f}, Profit: ${profit:.2f}, Quantity available: {quantity}. This is a {amount_range}-priced item with {profit_description}."
+
+        return f"Product: {product_name} from {category} category. Revenue: ${amount:.2f}, {profit_status}, Quantity: {quantity}. This is a {amount_range}-priced item."
             
     def _get_consumer_price_description(self, amount: float) -> str:
         """Get consumer-friendly price description"""

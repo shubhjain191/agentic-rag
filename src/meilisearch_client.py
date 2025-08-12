@@ -115,12 +115,26 @@ class MeilisearchClient:
             
             self.index.update_searchable_attributes([
                 'content',
+                'business_content',
                 'category',
                 'sub_category',
                 'order_id',
                 'amount',
                 'profit',
-                'quantity'
+                'quantity',
+                'amount_range',
+                'profit_range',
+                'quantity_range'
+            ])
+            
+
+            self.index.update_ranking_rules([
+                'words',
+                'typo',
+                'proximity',
+                'attribute',
+                'sort',
+                'exactness'
             ])
             
 
@@ -148,10 +162,11 @@ class MeilisearchClient:
             if not self.index:
                 self.get_or_create_index()
             
-            opt_params = {}
-            
-            if limit:
-                opt_params['limit'] = limit
+            opt_params = {
+                'limit': limit or 20, 
+                'attributesToRetrieve': ['id', 'content', 'business_content', 'category', 'sub_category', 'amount', 'profit', 'quantity'],
+                'attributesToHighlight': ['category', 'sub_category', 'content']
+            }
             
             if filters:
                 opt_params['filter'] = filters

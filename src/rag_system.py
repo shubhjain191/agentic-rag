@@ -32,48 +32,82 @@ class AgenticRAGSystem:
     def _smart_search(self, query: str, max_results: int, filters: str = None) -> Dict[str, Any]:
         """Perform smart search with improved relevance"""
         try:
+            query_lower = query.lower()
+            
             results = self.meilisearch_client.search(query, max_results, filters)
-            
-            if results.get('hits') and len(results['hits']) >= max_results:
-                return results
+            logger.info(f"Initial search found: {len(results.get('hits', []))} results")
             
             if not results.get('hits') or len(results['hits']) < max_results:
-                try:
-                    category_results = self.meilisearch_client.search_by_category(query, max_results)
+                logger.info("Insufficient results, doing category-based search...")
+                
+                category_mapping = {
+                    'clothing': ['clothing', 'clothes', 'dress', 'shirt', 'trousers', 'saree', 'stole', 'kurti', 'hankerchief', 't-shirt', 'shirt', 'gift', 'family', 'personal'],
+                    'furniture': ['furniture', 'chair', 'chairs', 'bookcase', 'bookcases', 'table', 'desk', 'home office', 'office', 'home'],
+                    'electronics': ['electronics', 'electronic', 'phone', 'phones', 'printer', 'printers', 'game', 'games', 'affordable electronics', 'tech', 'gadget']
+                }
+                
+                matching_categories = []
+                for category, keywords in category_mapping.items():
+                    if any(keyword in query_lower for keyword in keywords):
+                        matching_categories.append(category)
+                        logger.info(f"Query matches category: {category}")
+                
+                if not matching_categories:
+                    matching_categories = ['clothing', 'furniture', 'electronics']
+                    logger.info("No specific category detected, searching all categories")
+                
+                all_category_results = []
+                for category in matching_categories:
+                    logger.info(f"Searching category: {category}")
+                    
+                    category_filter = f"category = '{category.title()}'"
+                    category_results = self.meilisearch_client.search(query, max_results * 2, category_filter)
+                    
                     if category_results.get('hits'):
-                        if results.get('hits'):
-                            combined_hits = results['hits'] + category_results['hits']
-                            seen_ids = set()
-                            unique_hits = []
-                            for hit in combined_hits:
-                                if hit.get('id') not in seen_ids:
-                                    unique_hits.append(hit)
-                                    seen_ids.add(hit.get('id'))
-                                if len(unique_hits) >= max_results:
-                                    break
-                            results['hits'] = unique_hits
-                        else:
-                            results = category_results
-                except Exception as e:
-                    logger.warning(f"Category search failed: {e}")
+                        logger.info(f"Category {category} found {len(category_results['hits'])} results")
+                        all_category_results.extend(category_results['hits'])
+                    else:
+                        broader_results = self.meilisearch_client.search(category, max_results, category_filter)
+                        if broader_results.get('hits'):
+                            logger.info(f"Broader search in {category} found {len(broader_results['hits'])} results")
+                            all_category_results.extend(broader_results['hits'])
+                
+                unique_results = []
+                seen_ids = set()
+                for hit in all_category_results:
+                    if hit.get('id') not in seen_ids:
+                        unique_results.append(hit)
+                        seen_ids.add(hit.get('id'))
+                        if len(unique_results) >= max_results:
+                            break
+                
+                if unique_results:
+                    results['hits'] = unique_results
+                    logger.info(f"Category search completed - found {len(unique_results)} unique results")
+                else:
+                    logger.warning("Category search found no results")
             
             if not results.get('hits') or len(results['hits']) < max_results:
-                try:
-                    common_terms = ['electronics', 'furniture', 'clothing', 'phone', 'chair', 'saree']
-                    for term in common_terms:
-                        if len(results.get('hits', [])) >= max_results:
-                            break
-                        term_results = self.meilisearch_client.search(term, max_results - len(results.get('hits', [])))
-                        if term_results.get('hits'):
-                            if not results.get('hits'):
-                                results = term_results
-                            else:
-                                existing_ids = {hit.get('id') for hit in results['hits']}
-                                for hit in term_results['hits']:
-                                    if hit.get('id') not in existing_ids and len(results['hits']) < max_results:
-                                        results['hits'].append(hit)
-                except Exception as e:
-                    logger.warning(f"Fallback search failed: {e}")
+                logger.info("Doing final fallback search...")
+                
+                query_words = [word for word in query_lower.split() if len(word) > 2]
+                relevant_terms = ['clothing', 'furniture', 'electronics', 'phone', 'chair', 'saree', 'stole', 'affordable', 'gift', 'office']
+                
+                for term in relevant_terms + query_words:
+                    if len(results.get('hits', [])) >= max_results:
+                        break
+                    
+                    term_results = self.meilisearch_client.search(term, max_results - len(results.get('hits', [])))
+                    if term_results.get('hits'):
+                        if not results.get('hits'):
+                            results = term_results
+                        else:
+                            existing_ids = {hit.get('id') for hit in results['hits']}
+                            for hit in term_results['hits']:
+                                if hit.get('id') not in existing_ids and len(results['hits']) < max_results:
+                                    results['hits'].append(hit)
+                
+                logger.info(f"Fallback search completed - total results: {len(results.get('hits', []))}")
             
             if not results.get('hits'):
                 results['hits'] = []
@@ -82,6 +116,7 @@ class AgenticRAGSystem:
             if 'processingTimeMs' not in results:
                 results['processingTimeMs'] = 0
                 
+            logger.info(f"Final search results: {len(results['hits'])} hits")
             return results
             
         except Exception as e:
@@ -110,7 +145,9 @@ class AgenticRAGSystem:
             'business', 'profit', 'profitability', 'revenue', 'loss',
             'margin', 'margins', 'analysis', 'analytics', 'performance',
             'inventory', 'stock', 'quarterly', 'annual', 'strategy',
-            'management', 'optimization', 'efficiency', 'roi'
+            'management', 'optimization', 'efficiency', 'roi',
+            'highest', 'best', 'top', 'most profitable', 'profit margins',
+            'financial', 'commercial', 'enterprise', 'corporate'
         ]
         
         personal_matches = sum(1 for keyword in personal_keywords if keyword in query_lower)
@@ -131,14 +168,14 @@ class AgenticRAGSystem:
                 print("Error: Meilisearch is not running. Please start it first.")
                 return False
 
-            self.meilisearch_client.get_or_create_index()
+            # Always delete and recreate index for fresh start
+            self.meilisearch_client.delete_index()
+            
+            import time
+            time.sleep(2)
+            
+            self.meilisearch_client.create_index()
             self.meilisearch_client.configure_search_settings()
-            
-            stats = self.meilisearch_client.get_index_stats()
-            
-            if stats.get('numberOfDocuments', 0) > 0:
-                logger.info("Index already contains documents, skipping data loading")
-                return True
             
             print("Loading data...")
             documents = self.data_loader.process_data()
@@ -185,7 +222,8 @@ class AgenticRAGSystem:
                 }
             
             context_docs = search_results['hits']
-            messages = self.openrouter_client.create_rag_prompt(user_query, context_docs)
+            is_personal_context = self._detect_personal_context(user_query)
+            messages = self.openrouter_client.create_rag_prompt(user_query, context_docs, is_personal_context)
             
             llm_start_time = time.time()
             llm_response = self.openrouter_client.generate_response(
@@ -200,8 +238,6 @@ class AgenticRAGSystem:
             
             answer = llm_response['choices'][0]['message']['content']
             
-            is_personal_context = self._detect_personal_context(user_query)
-            
             sources = []
             for doc in context_docs:
                 if is_personal_context:
@@ -209,12 +245,22 @@ class AgenticRAGSystem:
                 else:
                     content = doc.get('business_content', doc.get('content', ''))  # Business content
                 
+                profit_data = None
+                if not is_personal_context and doc.get("profit") is not None:
+                    profit = doc.get("profit")
+                    if profit > 0:
+                        profit_data = f"+${profit:.2f}"  # Profit with + sign
+                    elif profit < 0:
+                        profit_data = f"-${abs(profit):.2f}"  # Loss with - sign
+                    else:
+                        profit_data = "$0.00"  # Zero profit
+
                 sources.append({
                     "order_id": doc.get("order_id"),
                     "category": doc.get("category"),
                     "sub_category": doc.get("sub_category"),
                     "amount": doc.get("amount"),
-                    "profit": doc.get("profit") if not is_personal_context else None,  # Hide profit for personal context
+                    "profit": profit_data,  # Formatted profit/loss data
                     "content": content
                 })
             
@@ -222,6 +268,7 @@ class AgenticRAGSystem:
                 "query": user_query,
                 "answer": answer,
                 "context": context_docs,
+                "context_detected": "PERSONAL" if is_personal_context else "BUSINESS",
                 "search_time": search_time,
                 "llm_time": llm_time,
                 "total_time": total_time,
@@ -315,4 +362,4 @@ if __name__ == "__main__":
                     
     except Exception as e:
         print(f"System initialization failed: {e}")
-        sys.exit(1) 
+        sys.exit(1)
