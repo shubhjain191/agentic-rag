@@ -48,15 +48,6 @@
    # Or download binary from https://github.com/meilisearch/meilisearch/releases
    ```
 
-2. **Create index and add data**
-   ```python
-   from src.meilisearch_client import MeilisearchClient
-   
-   client = MeilisearchClient()
-   client.create_index("products")
-   client.add_documents("products", your_product_data)
-   ```
-
 ### Data Preparation
 
 1. **Place your CSV data in the `data/` directory**
